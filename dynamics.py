@@ -146,22 +146,6 @@ class HFVDynamics:
         self.state = new_state
         return self.state.copy()
 
-    #def is_terminal(self, min_alt=-1000, max_alt=100000, min_v=100):
-    #    h = self.get_altitude()
-    #    v = self.state[3]
-    #    return h < min_alt or h > max_alt or v < min_v
-
-    # dynamics.py → HFVDynamics.is_terminal()
-    #def is_terminal(self):
-    #    alt = self.get_altitude()
-    #    rng = self.get_range()
-    #    gamma = self.state[4]
-    #    return (
-    #            alt < 0 or  # 撞地（地面以下）
-    #            rng > 200000 or  # 飞过头（200 km）
-    #            abs(gamma) > np.radians(10)  # 弹道倾角过大（失控）
-    #    )
-    # 在 HFVDynamics 类中
     def is_terminal(self, target_lat, target_lon):
         alt = self.get_altitude()
         if alt < 0:
@@ -172,8 +156,5 @@ class HFVDynamics:
         if s_arc > 300000:  # 超出 200 km 范围
             return True
 
-        #gamma = self.state[4]
-        #if gamma > np.radians(10):  # 不允许向上飞太多
-        #    return True
 
         return False
