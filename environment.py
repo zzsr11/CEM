@@ -123,28 +123,6 @@ class HFVEnv(gym.Env):
         heading_rate = self._cached_heading_rate
         elevation_rate = self._cached_elevation_rate
 
-        #s_arc = great_circle_distance(phi, lam, self.target_lat, self.target_lon)
-        #alt = self.dyn.get_altitude()
-        # 水平航向误差
-        #delta_lon = self.target_lon - lam
-        #y = np.sin(delta_lon) * np.cos(self.target_lat)
-        #x = np.cos(phi) * np.sin(self.target_lat) - np.sin(phi) * np.cos(self.target_lat) * np.cos(delta_lon)
-        #bearing_to_target = np.arctan2(y, x)
-        #heading_error = wrap_angle(bearing_to_target - chi)
-        # 垂直指向误差：LOS 俯仰角 vs 飞行路径角
-        #los_elevation = np.arctan2(-alt, s_arc + 1e-8)  # 目标在下方
-        #elevation_error = los_elevation - gamma
-        # ===== 新增：LOS 角速率（通过差分估计） =====
-        #dt = self.dyn.dt  # 0.1 秒
-        #heading_rate = (heading_error - self.prev_heading_error) / (dt + 1e-8)
-        #elevation_rate = (elevation_error - self.prev_elevation_error) / (dt + 1e-8)
-        # 更新历史（供下一步使用）
-        #self.prev_heading_error = heading_error
-        #self.prev_elevation_error = elevation_error
-        # 归一化角速率（可选，但推荐）
-        #heading_rate = np.clip(heading_rate, -5.0, 5.0)  # rad/s
-        #elevation_rate = np.clip(elevation_rate, -5.0, 5.0)  # rad/s
-
         return np.array([
             s_arc, V, gamma, chi, sigma, p, q, r,
             heading_error,
@@ -211,49 +189,7 @@ class HFVEnv(gym.Env):
             reward -= 0.5 * (abs(heading_rate) + abs(elevation_rate))
             return reward
 
-    #def _compute_reward(self, s_arc, prev_s_arc, done, success, heading_rate=0.0, elevation_rate=0.0, s_3d=None):
-    #    if s_3d is None:
-    #        s_3d = self._get_3d_distance()
-    #    if success:
-    #        V = self.dyn.state[3]
-    #        gamma = self.dyn.state[4]
-    #        speed_bonus = max(0, (V - 1000) * 0.01)
-    #        dive_bonus = max(0, (-gamma - np.radians(30))) * 50
-    #        return 1000.0 + speed_bonus + dive_bonus  # 👈 降低到 1000，避免量级失衡
-    #    elif done:
-            # 失败：按最终距离给负奖励
-    #        return -s_3d / 100.0  # 100m → -1, 10km → -100
-    #    else:
-    #        reward = 0.0
-            # 1. 鼓励靠近目标（基于 3D 距离减少）
-    #        progress_3d = (self.prev_s_3d - s_3d) * 0.1  # 新增 self.prev_s_3d
-    #        reward += progress_3d
-            # 2. 距离越近，奖励越高（平滑）
-    #        if s_3d < 5000:
-    #            reward += 500.0 * np.exp(-s_3d / 500.0)
-            # 3. 鼓励俯冲（但不过度惩罚）
-    #        gamma = self.dyn.state[4]
-    #        if gamma < 0:
-    #            reward += (-gamma) * 10.0
-    #        else:
-    #            reward -= 0.5  # 轻微惩罚
-            # 4. 鼓励高速
-    #        V = self.dyn.state[3]
-    #        if V > 1500:
-    #            reward += (V - 1500) * 0.005
-            # 5. 微弱惩罚抖动（仅在接近时）
-    #        if s_3d < 10000:
-    #            reward -= 0.05 * (abs(heading_rate) + abs(elevation_rate))
-            # 更新 prev_s_3d
-    #        self.prev_s_3d = s_3d
-    #        return reward
-
     def step(self, action):
-        #prev_s_arc = great_circle_distance(
-        #    self.dyn.state[2], self.dyn.state[1],
-        #    self.target_lat, self.target_lon
-        #)
-
         prev_s_arc = self._cached_s_arc if hasattr(self, '_cached_s_arc') else \
             great_circle_distance(self.dyn.state[2], self.dyn.state[1], self.target_lat, self.target_lon)
 
@@ -263,12 +199,6 @@ class HFVEnv(gym.Env):
         # 👇 关键：先更新 LOS 信息（用于 reward 和 obs）
         self._update_los_errors()
 
-        # 计算当前水平距离
-        #alt = self.dyn.get_altitude()
-        #s_arc = great_circle_distance(
-        #    self.dyn.state[2], self.dyn.state[1],
-        #    self.target_lat, self.target_lon
-
         # 获取当前距离
         s_arc = self._cached_s_arc
         alt = self._cached_alt
@@ -277,21 +207,8 @@ class HFVEnv(gym.Env):
         self.min_s_3d = min(self.min_s_3d, s_3d)
         success = (s_3d < 1300.0)
 
-        # ✅ 关键：用 3D 距离判断是否命中
-        #s_3d = self._get_3d_distance()
-        #success = (s_3d < 100.0)  # 100 米球形杀伤半径
-
-        # 终止条件
-        # 计算是否成功（必须在 is_terminal 之前判断！）
-        #success = (s_arc < 100.0)# and (self.dyn.get_altitude() < 1000.0)
-
-        # 终止条件：成功 或 动力学失败 或 超时
-        #done = success or self.dyn.is_terminal(self.target_lat, self.target_lon) or (self.step_count >= self.max_steps)
-        #done = self.dyn.is_terminal() or self.step_count >= self.max_steps
-        #success = s_arc < 1000.0 and self.dyn.get_altitude() < 1000  # 1km 内命中
         done = success or self.dyn.is_terminal(self.target_lat, self.target_lon) or (self.step_count >= self.max_steps)
 
-        # 现在可以安全使用缓存的 LOS 速率！
         reward = self._compute_reward(
             s_arc, prev_s_arc, done, success,
             heading_rate = self._cached_heading_rate,
@@ -299,9 +216,6 @@ class HFVEnv(gym.Env):
             s_3d = s_3d
         )
 
-
-
-        #reward = self._compute_reward(s_arc, prev_s_arc, done, success)
         obs = self._get_obs()
         info = {
             "s_arc": s_arc,  # 水平距离（米）
@@ -313,5 +227,6 @@ class HFVEnv(gym.Env):
             "V": self.dyn.state[3],
             "gamma_deg": np.degrees(self.dyn.state[4])
         }
+
 
         return obs, reward, done, False, info
